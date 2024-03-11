@@ -1,0 +1,9 @@
+.DS_Store
+~$data.xlsx
+__pycache__/
+SECRET.py
+s-and-p-500_zip/
+old-code/
+production_plot.txt
+data.xlsx
+random-forest.py
