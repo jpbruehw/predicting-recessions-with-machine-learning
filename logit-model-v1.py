@@ -1,43 +1,40 @@
 # import libraries
 import pandas as pd
-import numpy as np
 from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
-from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import GridSearchCV
-from sklearn.metrics import confusion_matrix, precision_score, f1_score, accuracy_score, roc_auc_score, roc_curve, auc, recall_score
+from sklearn.linear_model import LogisticRegression
+from sklearn.metrics import confusion_matrix, precision_score, f1_score, accuracy_score, roc_auc_score, recall_score
 
 # import the training data
 data_raw = pd.read_excel('~/Desktop/master-thesis-code/data.xlsx', index_col=0)
 
-# set up a params grid to find the best performing model
-# we can pass in each of the models
-# there is no need to redfine this for each model
+# set up lags for looping
+lags = [3, 6, 9, 12, 18]
+
+# set the parameter grid
 param_grid = {
-    'n_estimators': [50, 100, 200, 300],
-    'max_depth': [None, 5, 10, 20],
-    'min_samples_leaf': [1, 2, 4, 8],
-    'max_features': ['sqrt', 'log2', None],
-    'min_samples_split': [2, 5, 10],
-    'criterion': ['gini', 'entropy'],
-    'class_weight': [None, 'balanced']
+    'penalty': ['l1', 'l2'],
+    'solver': ['liblinear', 'lbfgs'],
+    'max_iter': [100, 200, 300, 400, 500],
+    'C': [0.001, 0.01, 0.1, 1, 10, 100]
 }
 
-# set up function to run the the random forest
-def run_random_forest(data, lag, test_size, scoring, params, stratify):
+# set up function to handle the logit model
+def run_logit_regression(data, lag, test_size, scoring, params, stratify):
     
     """
     This function takes various inputs 
     and returns summary statistics
-    for the random forest models
+    for the logistic regression model
     some inputs persist across iterations
     """
     
-    # initiate the model
-    rf_classifier = RandomForestClassifier(random_state=42, verbose=1, n_jobs=12)
-    
     # make a copy of the original DataFrame to avoid modifying it
     data_copy = data.copy()
+    
+    # initiliaze the logistic regression model
+    logistic_regression = LogisticRegression(random_state=42, verbose=1, n_jobs=12)
     
     # modify dataset for lag
     # we want to set the recession indicator back by the lag so that t0 is aligned with t+lag
@@ -58,20 +55,21 @@ def run_random_forest(data, lag, test_size, scoring, params, stratify):
     
     # update the parameters grid
     params['class_weight'] = [None, 'balanced', class_weights]
-    
+
     # split data into training and test data
     if stratify:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42, stratify=y)
+        
     else:
         X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=test_size, random_state=42)
-    
+        
     # apply SMOTE only to the training data
     smote = SMOTE(random_state=42)
     X_train_resampled, y_train_resampled = smote.fit_resample(X_train, y_train)
     
     # set up the grid search object to perform the analysis
     # set cross validation to 5 which is a standard benchmark
-    grid_search_cv = GridSearchCV(estimator=rf_classifier, param_grid=params, cv=5, scoring=scoring)
+    grid_search_cv = GridSearchCV(estimator=logistic_regression, param_grid=params, cv=5, scoring=scoring)
     
     # perform the initial grid search
     grid_search_cv.fit(X_train_resampled, y_train_resampled)
@@ -105,18 +103,15 @@ def run_random_forest(data, lag, test_size, scoring, params, stratify):
             'confusion_matrix': conf_mat,
             'model_metrics': metrics_obj}
 
-# set up lag list
-lags = [3, 6, 9, 12, 18]
-
-# make a list of the resulting ranom forest
-random_forest_results = [(f"{lag}_month_lag_results", run_random_forest(data_raw, lag, 0.2, 'precision', param_grid, False)) for lag in lags]
+# make a list of the resulting logistic models
+logit_results = [(f"{lag}_month_lag_results", run_logit_regression(data_raw, lag, 0.2, 'precision', param_grid, False)) for lag in lags]
 
 # make a dataframe of all accuracy results
 headers_metrics = ['lag', 'accuracy', 'precision', 'recall', 'f1', 'roc_auc']
 # store the results for each iteration
 iteration_metrics = []
 # iterate over results
-for result in random_forest_results:
+for result in logit_results:
     # extract from the tuple
     metrics = result[1]['model_metrics']
     # extract each value
@@ -129,37 +124,3 @@ for result in random_forest_results:
 metric_data = pd.DataFrame(iteration_metrics, columns=headers_metrics)
 
 print(metric_data)
-
-# go through and see if the model is over or underestimating recessions
-headers_false_true_summary = ['lag', 'recession_true', 'recession_true_pred', 'recession_false', 'recession_false_pred', 'false_pos_rate', 'false_neg_rate']
-
-# store iteration calculations
-iteration_summaries_rf = []
-
-# loop over data
-for result in random_forest_results:
-    # extract the relevant data
-    data = result[1]
-    y_true_pred = pd.DataFrame({'y_actual': data['y_true'], 'y_predicted': data['y_pred']})
-    
-    # create row of data with the calculations
-    true_pos = np.sum(y_true_pred['y_actual'] == 1)
-    true_neg = np.sum(y_true_pred['y_actual'] == 0)
-    pred_pos = np.sum(y_true_pred['y_predicted'] == 1)
-    false_pos_rate = np.sum((y_true_pred['y_actual'] == 0) & (y_true_pred['y_predicted'] == 1)) / (np.sum(y_true_pred['y_actual'] == 0))
-    false_neg_rate = np.sum((y_true_pred['y_actual'] == 1) & (y_true_pred['y_predicted'] == 0)) / (np.sum(y_true_pred['y_actual'] == 1))
-
-    # create a list of the stats to pass in
-    summary_stats = [true_pos, pred_pos, true_neg, len(y_true_pred) - pred_pos, false_pos_rate, false_neg_rate]
-    
-    # insert lag name
-    summary_stats.insert(0, result[0])
-    
-    # append to result list
-    iteration_summaries_rf.append(summary_stats)
-
-# convert to df
-complete_summary_stats_rf = pd.DataFrame(iteration_summaries_rf, columns=headers_false_true_summary)
-
-# print results
-print(complete_summary_stats_rf)

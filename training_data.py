@@ -12,7 +12,7 @@ from sklearn.preprocessing import MinMaxScaler
 
 # set up access
 #fred = Fred(api_key=API_KEY)
-fred = Fred(api_key='7b3d71a83425674aa6c03fb3c8f0eab4')
+fred = Fred(api_key='ENTER KEY')
 
 # get series for the NBER recession indicator
 nber_recession_data = fred.get_series('USREC')
@@ -70,7 +70,7 @@ if treasury_10_yr is not None and t_bill_monthly_data is not None:
 
 # import the sp500 data
 # adjust file path
-raw_sp500_data = pd.read_csv('~/desktop/master-thesis-code/sp500_data.csv')
+raw_sp500_data = pd.read_csv('ENTER PATH')
 
 # create a series of the relevant data
 sp500_data = pd.Series(raw_sp500_data['SP500'].values, index=raw_sp500_data['Date'])
@@ -723,5 +723,5 @@ print('Recession Frequency Production Data: ', recession_frequency_production)
 # export the data to excel
 #------------------------#
 # create the path and create writer
-path = '~/Desktop/master-thesis-code/data.xlsx'
+path = 'ENTER PATH'
 all_data.to_excel(path, index=True)
