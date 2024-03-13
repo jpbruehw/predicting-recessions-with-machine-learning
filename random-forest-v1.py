@@ -163,3 +163,11 @@ complete_summary_stats_rf = pd.DataFrame(iteration_summaries_rf, columns=headers
 
 # print results
 print(complete_summary_stats_rf)
+
+# write data to excel to transfer to local file
+# we will do further data processing in another script
+path = '~/desktop/master-thesis-code/summary-all-models.xlsx'
+writer = pd.ExcelWriter(path, engine='openpyxl')
+
+# export summary stats
+complete_summary_stats_rf.to_excel(writer, sheet_name='random-forest-stats', index=False)

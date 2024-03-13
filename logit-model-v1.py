@@ -1,5 +1,6 @@
 # import libraries
 import pandas as pd
+import numpy as np
 from sklearn.model_selection import train_test_split
 from imblearn.over_sampling import SMOTE
 from sklearn.model_selection import GridSearchCV
@@ -49,12 +50,14 @@ def run_logit_regression(data, lag, test_size, scoring, params, stratify):
     y = data_copy[f"nber_recession_{lag}_month_lag"]
     
     # calculate the class weights manually
-    class_counts = y.value_counts()
-    total_samples = len(y)
-    class_weights = {cls: total_samples / (len(class_counts) * count) for cls, count in class_counts.items()}
+    #class_counts = y.value_counts()
+    #total_samples = len(y)
+    #class_weights = {cls: total_samples / (len(class_counts) * count) for cls, count in class_counts.items()}
+    
+    #'class_weights': class_weights,
     
     # update the parameters grid
-    params['class_weight'] = [None, 'balanced', class_weights]
+    params['class_weight'] = [None, 'balanced']
 
     # split data into training and test data
     if stratify:
@@ -95,7 +98,6 @@ def run_logit_regression(data, lag, test_size, scoring, params, stratify):
 
     
     return {'data': data_copy,
-            'class_weights': class_weights,
             'best_parameters': best_parameters,
             'best_model': best_model,
             'y_true': y_test,
@@ -124,3 +126,45 @@ for result in logit_results:
 metric_data = pd.DataFrame(iteration_metrics, columns=headers_metrics)
 
 print(metric_data)
+
+# go through and see if the model is over or underestimating recessions
+headers_false_true_summary = ['lag', 'recession_true', 'recession_true_pred', 'recession_false', 'recession_false_pred', 'false_pos_rate', 'false_neg_rate']
+
+# store iteration calculations
+iteration_summaries_lg = []
+
+# loop over data
+for result in logit_results:
+    # extract the relevant data
+    data = result[1]
+    y_true_pred = pd.DataFrame({'y_actual': data['y_true'], 'y_predicted': data['y_pred']})
+    
+    # create row of data with the calculations
+    true_pos = np.sum(y_true_pred['y_actual'] == 1)
+    true_neg = np.sum(y_true_pred['y_actual'] == 0)
+    pred_pos = np.sum(y_true_pred['y_predicted'] == 1)
+    false_pos_rate = np.sum((y_true_pred['y_actual'] == 0) & (y_true_pred['y_predicted'] == 1)) / (np.sum(y_true_pred['y_actual'] == 0))
+    false_neg_rate = np.sum((y_true_pred['y_actual'] == 1) & (y_true_pred['y_predicted'] == 0)) / (np.sum(y_true_pred['y_actual'] == 1))
+
+    # create a list of the stats to pass in
+    summary_stats = [true_pos, pred_pos, true_neg, len(y_true_pred) - pred_pos, false_pos_rate, false_neg_rate]
+    
+    # insert lag name
+    summary_stats.insert(0, result[0])
+    
+    # append to result list
+    iteration_summaries_lg.append(summary_stats)
+
+# convert to df
+complete_summary_stats_lg = pd.DataFrame(iteration_summaries_lg, columns=headers_false_true_summary)
+
+# print results
+print(complete_summary_stats_lg)
+
+# write data to excel to transfer to local file
+# we will do further data processing in another script
+path = '~/desktop/master-thesis-code/summary-all-models.xlsx'
+writer = pd.ExcelWriter(path, engine='openpyxl')
+
+# export summary stats
+complete_summary_stats_lg.to_excel(writer, sheet_name='logit-regression-stats', index=False)
